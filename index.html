@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>xlate — terminal translator</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&display=swap">
+<style>
+:root{--page:#e3d9c3;--bg:#f3ead6;--fg:#241808;--dim:#6b5a42;--acc:#b34a10;--ai:#0f4a28;--err:#a3212c;--hl:rgba(31,122,70,.16);--bar:#e6dbc1;--line:#cdbf9f;--scan:rgba(90,70,40,.02);--glow:none;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--page:#1d1a1f;--bg:#2b2730;--fg:#fff6e0;--dim:#c4bad0;--acc:#ffb98a;--ai:#c9ffc0;--err:#ffa3a3;--hl:rgba(169,255,160,.14);--bar:#34303a;--line:#463f4d;--scan:rgba(255,255,255,.015);--glow:0 0 8px rgba(255,225,170,.45)}}
+:root[data-theme="dark"]{--page:#1d1a1f;--bg:#2b2730;--fg:#fff6e0;--dim:#c4bad0;--acc:#ffb98a;--ai:#c9ffc0;--err:#ffa3a3;--hl:rgba(169,255,160,.14);--bar:#34303a;--line:#463f4d;--scan:rgba(255,255,255,.015);--glow:0 0 8px rgba(255,225,170,.45)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0}
+body{background:var(--page);color:var(--fg);font:22px/1.35 "VT323",ui-monospace,Menlo,Consolas,"Courier New",monospace;text-shadow:var(--glow);padding:12px;box-sizing:border-box}
+#w{height:100%;max-width:880px;margin:0 auto;display:flex;flex-direction:column;background:var(--bg);border:2px solid var(--line);border-radius:14px;overflow:hidden;position:relative;box-shadow:0 8px 30px rgba(0,0,0,.18)}
+#w:after{content:"";position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,var(--scan) 0 1px,transparent 1px 3px)}
+header{background:var(--bar);padding:6px 14px;color:var(--dim);display:flex;align-items:center;gap:10px;border-bottom:2px solid var(--line)}
+.dots i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;background:#e39a9a}.dots i:nth-child(2){background:#f0cf8a}.dots i:nth-child(3){background:#a9cfa4}
+#ttl{flex:1;text-align:center}
+#out{flex:1;overflow-y:auto;padding:14px 18px}
+.l{white-space:pre-wrap;word-break:break-word;margin:0 0 8px}
+.u:before{content:"> ";color:var(--acc);font-weight:bold}
+.ai{color:var(--ai);font-size:26px;line-height:1.3;background:var(--hl);border-left:4px solid var(--ai);border-radius:4px;padding:6px 12px;margin:2px 0 14px 2ch}
+.u{font-size:24px;color:var(--fg)}
+.sys{color:var(--dim);font-size:21px}.err{color:var(--err)}
+form{display:flex;gap:8px;padding:10px 18px;background:var(--bar);align-items:flex-start;border-top:2px solid var(--line)}
+#pr{color:var(--acc);white-space:nowrap}
+#in{flex:1;background:transparent;border:0;outline:0;color:var(--fg);font:inherit;text-shadow:inherit;resize:none;caret-color:var(--acc);caret-shape:block;max-height:30vh}
+#in::placeholder{color:var(--dim)}
+footer{background:var(--bar);color:var(--dim);font-size:17px;line-height:1.2;padding:0 18px 8px}
+</style>
+</head>
+<body>
+<div id="w"><header><span class="dots"><i></i><i></i><i></i></span><span id="ttl">xlate v1.0 — translation only</span><span id="st"></span></header>
+<div id="out"></div>
+<form id="f"><span id="pr"></span><textarea id="in" rows="1" autofocus autocomplete="off" spellcheck="false" placeholder="type text, or /help"></textarea></form>
+<footer>Machine translation (free engine, max 450 characters per message). Not certified; for legal, medical or official documents use a certified human translator.</footer></div>
+<script>
+var out=document.getElementById('out'),inp=document.getElementById('in'),pr=document.getElementById('pr'),st=document.getElementById('st');
+var S={from:'auto-detect',to:'English'},busy=false,sample=null;
+function line(c,t){var d=document.createElement('div');d.className='l '+c;d.textContent=t;out.appendChild(d);out.scrollTop=out.scrollHeight;return d}
+function ui(){pr.textContent='['+S.from+' → '+S.to+']$';st.textContent=S.from+' → '+S.to}
+function help(){line('sys','commands:\n  /to <language>              target, e.g. /to Spanish, /to fr, /to Japanese\n  /from <language|auto>       source, default auto-detect\n  /swap                       swap source and target\n  /clear                      clear screen\n  /help                       this message\n\nAnything else you type is translated. Enter = send, Shift+Enter = new line.')}
+function cmd(t){var m=t.match(/^\/(\w+)\s*(.*)$/),c=m[1].toLowerCase(),a=m[2].trim();
+ if(c==='to'&&a){S.to=a}else if(c==='from'&&a){S.from=/^auto/i.test(a)?'auto-detect':a}
+ else if(c==='swap'){if(S.from==='auto-detect'){line('err','cannot swap: source is auto-detect');return}var x=S.from;S.from=S.to;S.to=x}
+ else if(c==='clear'){out.textContent='';return}else if(c==='help'){help();return}
+ else{line('err','unknown or incomplete command. try /help');return}
+ ui();line('sys','ok: '+S.from+' → '+S.to)}
+async function tr(t){
+ busy=true;var d=line('ai','translating…');
+ try{
+  var r=await fetch('/api/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t,from:S.from,to:S.to})});
+  var j=await r.json();
+  if(!r.ok){d.className='l err';d.textContent='error: '+(j.error||'translation failed');}
+  else{d.textContent=j.text+(j.detected?'\ndetected: '+j.detected:'')}
+ }catch(e){d.className='l err';d.textContent='error: could not reach the server'}
+ busy=false;inp.focus()}
+document.getElementById('f').addEventListener('submit',function(e){e.preventDefault();var t=inp.value.trim();if(!t||busy)return;inp.value='';inp.style.height='auto';line('u',t);t[0]==='/'?cmd(t):tr(t)});
+inp.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();document.getElementById('f').requestSubmit()}});
+inp.addEventListener('input',function(){inp.style.height='auto';inp.style.height=inp.scrollHeight+'px'});
+document.body.addEventListener('click',function(){inp.focus()});
+line('sys','xlate — translation terminal\nTranslates between ~30 languages. Regional dialects are not supported in this free version. Default target: English.');help();ui();
+</script>
+</body>
+</html>
